@@ -1,0 +1,109 @@
+@using JaxaRainmap.Models
+
+<div class="control-group animation-controls">
+    <label class="control-label">
+        Animation
+        @if (IsPlaying && CurrentFrame is not null)
+        {
+            <span class="frame-indicator">\u2014 @CurrentFrame.DisplayLabel</span>
+        }
+    </label>
+
+    <div class="animation-buttons">
+        <button class="anim-btn" @onclick="OnPlayPause" title="@(IsPlaying ? "Pause" : "Play")">
+            @(IsPlaying ? "\u23F8" : "\u25B6")
+        </button>
+        <button class="anim-btn" @onclick="OnStop" disabled="@(!IsPlaying && CurrentFrameIndex == 0)" title="Stop">
+            \u23F9
+        </button>
+        <button class="anim-btn" @onclick="StepBackward" disabled="@IsPlaying" title="Previous frame">
+            \u23EE
+        </button>
+        <button class="anim-btn" @onclick="StepForward" disabled="@IsPlaying" title="Next frame">
+            \u23ED
+        </button>
+    </div>
+
+    <div class="speed-control">
+        <label>Speed:</label>
+        <select class="control-select speed-select" value="@PlaybackSpeed" @onchange="OnSpeedChanged">
+            <option value="0.5">0.5\u00D7</option>
+            <option value="1">1\u00D7</option>
+            <option value="2">2\u00D7</option>
+            <option value="4">4\u00D7</option>
+        </select>
+    </div>
+
+    @if (Frames.Count > 0)
+    {
+        <div class="frame-progress">
+            <input type="range"
+                   class="control-slider"
+                   min="0"
+                   max="@(Frames.Count - 1)"
+                   value="@CurrentFrameIndex"
+                   @oninput="OnFrameSliderChanged"
+                   disabled="@IsPlaying" />
+            <span class="frame-count">@(CurrentFrameIndex + 1) / @Frames.Count</span>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public List<PrecipitationFrame> Frames { get; set; } = new();
+    [Parameter] public int CurrentFrameIndex { get; set; } = 0;
+    [Parameter] public bool IsPlaying { get; set; } = false;
+    [Parameter] public double PlaybackSpeed { get; set; } = 1.0;
+    [Parameter] public EventCallback<bool> IsPlayingChanged { get; set; }
+    [Parameter] public EventCallback<int> CurrentFrameIndexChanged { get; set; }
+    [Parameter] public EventCallback<double> PlaybackSpeedChanged { get; set; }
+
+    private PrecipitationFrame? CurrentFrame =>
+        Frames.Count > CurrentFrameIndex ? Frames[CurrentFrameIndex] : null;
+
+    private async Task OnPlayPause()
+    {
+        IsPlaying = !IsPlaying;
+        await IsPlayingChanged.InvokeAsync(IsPlaying);
+    }
+
+    private async Task OnStop()
+    {
+        IsPlaying = false;
+        CurrentFrameIndex = 0;
+        await IsPlayingChanged.InvokeAsync(false);
+        await CurrentFrameIndexChanged.InvokeAsync(0);
+    }
+
+    private async Task StepForward()
+    {
+        if (Frames.Count == 0) return;
+        CurrentFrameIndex = (CurrentFrameIndex + 1) % Frames.Count;
+        await CurrentFrameIndexChanged.InvokeAsync(CurrentFrameIndex);
+    }
+
+    private async Task StepBackward()
+    {
+        if (Frames.Count == 0) return;
+        CurrentFrameIndex = CurrentFrameIndex <= 0 ? Frames.Count - 1 : CurrentFrameIndex - 1;
+        await CurrentFrameIndexChanged.InvokeAsync(CurrentFrameIndex);
+    }
+
+    private async Task OnSpeedChanged(ChangeEventArgs e)
+    {
+        if (double.TryParse(e.Value?.ToString(), out var speed))
+        {
+            PlaybackSpeed = speed;
+            await PlaybackSpeedChanged.InvokeAsync(speed);
+        }
+    }
+
+    private async Task OnFrameSliderChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var idx) && idx >= 0 && idx < Frames.Count)
+        {
+            CurrentFrameIndex = idx;
+            await CurrentFrameIndexChanged.InvokeAsync(idx);
+        }
+    }
+}

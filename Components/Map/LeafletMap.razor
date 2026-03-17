@@ -1,0 +1,62 @@
+@using Microsoft.JSInterop
+
+<div id="@MapElementId" class="leaflet-map-container"></div>
+
+@code {
+    [Parameter] public string MapElementId { get; set; } = "rainmap";
+    [Parameter] public double CenterLat { get; set; } = 20.0;
+    [Parameter] public double CenterLon { get; set; } = 136.0;
+    [Parameter] public int Zoom { get; set; } = 3;
+    [Parameter] public EventCallback<bool> OnLayerLoaded { get; set; }
+
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+
+    private bool _mapInitialized;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await InitMapAsync();
+        }
+    }
+
+    public async Task InitMapAsync()
+    {
+        await JS.InvokeVoidAsync("leafletInterop.initMap", MapElementId, CenterLat, CenterLon, Zoom);
+        _mapInitialized = true;
+    }
+
+    public async Task<bool> LoadPrecipitationAsync(string cogUrl, string palette = "jma", double minVal = 0, double maxVal = 100)
+    {
+        if (!_mapInitialized) return false;
+
+        var result = await JS.InvokeAsync<bool>("leafletInterop.loadCogLayer", cogUrl, palette, minVal, maxVal);
+        await OnLayerLoaded.InvokeAsync(result);
+        return result;
+    }
+
+    public async Task<bool> SwapFrameAsync(string cogUrl, string palette = "jma", double minVal = 0, double maxVal = 100)
+    {
+        if (!_mapInitialized) return false;
+        return await JS.InvokeAsync<bool>("leafletInterop.swapFrame", cogUrl, palette, minVal, maxVal);
+    }
+
+    public async Task ClearOverlayAsync()
+    {
+        if (!_mapInitialized) return;
+        await JS.InvokeVoidAsync("leafletInterop.removeCogLayer");
+    }
+
+    public async Task FitBoundsAsync(double south, double west, double north, double east)
+    {
+        if (!_mapInitialized) return;
+        await JS.InvokeVoidAsync("leafletInterop.fitBounds", south, west, north, east);
+    }
+
+    public async Task InvalidateSizeAsync()
+    {
+        if (!_mapInitialized) return;
+        await JS.InvokeVoidAsync("leafletInterop.invalidateSize");
+    }
+}

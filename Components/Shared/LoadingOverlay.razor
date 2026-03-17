@@ -1,0 +1,12 @@
+@if (IsVisible)
+{
+    <div class="loading-overlay">
+        <div class="loading-spinner"></div>
+        <p class="loading-text">@Message</p>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; } = false;
+    [Parameter] public string Message { get; set; } = "Loading precipitation data...";
+}

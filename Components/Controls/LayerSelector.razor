@@ -1,0 +1,21 @@
+<div class="control-group">
+    <label class="control-label">Dataset</label>
+    <select class="control-select" value="@SelectedType" @onchange="OnTypeChanged">
+        <option value="daily">Daily Precipitation</option>
+        <option value="monthly">Monthly Precipitation</option>
+        <option value="monthly-normal">Monthly Normal (Climatology)</option>
+        <option value="half-monthly-normal">Half-Monthly Normal</option>
+    </select>
+</div>
+
+@code {
+    [Parameter] public string SelectedType { get; set; } = "daily";
+    [Parameter] public EventCallback<string> SelectedTypeChanged { get; set; }
+
+    private async Task OnTypeChanged(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? "daily";
+        SelectedType = val;
+        await SelectedTypeChanged.InvokeAsync(val);
+    }
+}

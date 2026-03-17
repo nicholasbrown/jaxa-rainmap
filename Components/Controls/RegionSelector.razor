@@ -1,0 +1,29 @@
+@using JaxaRainmap.Models
+
+<div class="control-group">
+    <label class="control-label">Region</label>
+    <div class="region-buttons">
+        @foreach (var region in RegionPreset.All)
+        {
+            <button class="region-btn @(IsActive(region) ? "active" : "")"
+                    @onclick="() => SelectRegion(region)">
+                @region.Name
+            </button>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback<RegionPreset> OnRegionSelected { get; set; }
+
+    private RegionPreset? _activeRegion;
+
+    private bool IsActive(RegionPreset region) =>
+        _activeRegion?.Name == region.Name;
+
+    private async Task SelectRegion(RegionPreset region)
+    {
+        _activeRegion = region;
+        await OnRegionSelected.InvokeAsync(region);
+    }
+}

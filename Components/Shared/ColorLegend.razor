@@ -1,0 +1,34 @@
+<div class="color-legend">
+    <div class="legend-header">
+        <span class="legend-title">Precipitation (mm/hr)</span>
+        <select class="palette-select" value="@SelectedPalette" @onchange="OnPaletteChanged">
+            <option value="jma">JMA</option>
+            <option value="viridis">Viridis</option>
+            <option value="turbo">Turbo</option>
+        </select>
+    </div>
+
+    <div class="legend-bar-container">
+        <div class="legend-bar @SelectedPalette"></div>
+        <div class="legend-ticks">
+            @foreach (var tick in GetTicks())
+            {
+                <span class="legend-tick">@tick</span>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string SelectedPalette { get; set; } = "jma";
+    [Parameter] public EventCallback<string> SelectedPaletteChanged { get; set; }
+
+    private async Task OnPaletteChanged(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? "jma";
+        SelectedPalette = val;
+        await SelectedPaletteChanged.InvokeAsync(val);
+    }
+
+    private static string[] GetTicks() => new[] { "0", "1", "5", "10", "20", "30", "50", "80", "100+" };
+}

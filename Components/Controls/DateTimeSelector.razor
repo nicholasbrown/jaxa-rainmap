@@ -1,0 +1,57 @@
+@using JaxaRainmap.Models
+
+<div class="control-group">
+    <label class="control-label">Date</label>
+    <input type="date"
+           class="control-input"
+           value="@SelectedDate.ToString("yyyy-MM-dd")"
+           max="@DateTime.UtcNow.ToString("yyyy-MM-dd")"
+           min="2000-03-01"
+           @onchange="OnDateChanged" />
+</div>
+
+<div class="control-group">
+    <label class="control-label">Hour (UTC): @SelectedHour:00</label>
+    <input type="range"
+           class="control-slider"
+           min="0"
+           max="23"
+           step="1"
+           value="@SelectedHour"
+           @oninput="OnHourChanged" />
+    <div class="slider-labels">
+        <span>00</span>
+        <span>06</span>
+        <span>12</span>
+        <span>18</span>
+        <span>23</span>
+    </div>
+</div>
+
+@code {
+    [Parameter] public DateTime SelectedDate { get; set; } = DateTime.UtcNow.AddDays(-1);
+    [Parameter] public int SelectedHour { get; set; } = 0;
+    [Parameter] public EventCallback<DateTime> SelectedDateChanged { get; set; }
+    [Parameter] public EventCallback<int> SelectedHourChanged { get; set; }
+    [Parameter] public EventCallback OnSelectionChanged { get; set; }
+
+    private async Task OnDateChanged(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        {
+            SelectedDate = date;
+            await SelectedDateChanged.InvokeAsync(date);
+            await OnSelectionChanged.InvokeAsync();
+        }
+    }
+
+    private async Task OnHourChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var hour))
+        {
+            SelectedHour = hour;
+            await SelectedHourChanged.InvokeAsync(hour);
+            await OnSelectionChanged.InvokeAsync();
+        }
+    }
+}
