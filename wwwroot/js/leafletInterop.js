@@ -6,6 +6,8 @@ window.leafletInterop = {
 
     // Prebuffer cache: Map<string, georaster>
     _geoCache: new Map(),
+    // Pre-rendered animation layers: array of layer arrays (one per frame)
+    _preRenderedFrames: [],
     // Animation state
     _animFrames: [],
     _animIndex: 0,
@@ -13,7 +15,6 @@ window.leafletInterop = {
     _animRunning: false,
     _animTimerId: null,
     _animPalette: 'jma',
-    _animDotNetRef: null,
 
     // Bridge JS logs to C# ILogger
     _log: function (level, category, message) {
@@ -129,6 +130,7 @@ window.leafletInterop = {
     // --- Prebuffer engine ---
 
     prebufferFrames: async function (frameUrlSets, paletteType) {
+        // Phase 1: Download all COG tiles
         var allUrls = [];
         for (const urlSet of frameUrlSets) {
             for (const url of urlSet) {
@@ -162,8 +164,46 @@ window.leafletInterop = {
             } catch (_) { }
         }
 
-        this._log('info', 'Animation', 'Prebuffer complete: ' + this._geoCache.size + ' tiles cached');
+        // Phase 2: Pre-create all Leaflet layers and add them hidden to the map
+        this._cleanupPreRenderedFrames();
+        var colorFn = this._getColorFunction(paletteType, 0, 100);
+
+        for (var i = 0; i < frameUrlSets.length; i++) {
+            var frameLayers = [];
+            for (const url of frameUrlSets[i]) {
+                var georaster = this._geoCache.get(url);
+                if (!georaster) continue;
+
+                var layer = new GeoRasterLayer({
+                    georaster: georaster,
+                    opacity: 0.7,
+                    pixelValuesToColorFn: colorFn,
+                    resolution: 256
+                });
+                // Add to map but hide immediately (opacity 0)
+                layer.addTo(this.map);
+                layer.setOpacity(0);
+                frameLayers.push(layer);
+            }
+            this._preRenderedFrames.push(frameLayers);
+        }
+
+        // Wait a tick for all layers to render their canvases
+        await new Promise(resolve => setTimeout(resolve, 200));
+
+        this._log('info', 'Animation', 'Prebuffer complete: ' + this._preRenderedFrames.length + ' frames pre-rendered');
         return true;
+    },
+
+    _cleanupPreRenderedFrames: function () {
+        if (this.map) {
+            for (const frameLayers of this._preRenderedFrames) {
+                for (const layer of frameLayers) {
+                    this.map.removeLayer(layer);
+                }
+            }
+        }
+        this._preRenderedFrames = [];
     },
 
     // Render a frame from the cache (instant, no network)
@@ -201,7 +241,7 @@ window.leafletInterop = {
         return newLayers.length > 0;
     },
 
-    // --- JS-driven animation loop ---
+    // --- JS-driven animation loop (opacity toggling, no layer creation during playback) ---
 
     startAnimation: function (frames, speed, paletteType) {
         this.stopAnimation();
@@ -212,25 +252,47 @@ window.leafletInterop = {
         this._animIndex = 0;
         this._animRunning = true;
 
-        this._log('info', 'Animation', 'Starting playback: ' + frames.length + ' frames at ' + speed + 'x');
+        this._log('info', 'Animation', 'Starting playback: ' + this._preRenderedFrames.length + ' pre-rendered frames at ' + speed + 'x');
+
+        // Hide non-animation layers
+        this._removeCurrentLayers();
+
+        // Show first frame
+        if (this._preRenderedFrames.length > 0) {
+            this._showFrame(0);
+        }
 
         var self = this;
         var interval = 1000.0 / speed;
 
-        if (frames.length > 0) {
-            this.renderCachedFrame(frames[0], paletteType);
-        }
-
         this._animTimerId = setInterval(function () {
-            if (!self._animRunning || self._animFrames.length === 0) return;
+            if (!self._animRunning || self._preRenderedFrames.length === 0) return;
 
-            self._animIndex = (self._animIndex + 1) % self._animFrames.length;
-            self.renderCachedFrame(self._animFrames[self._animIndex], self._animPalette);
+            var prevIndex = self._animIndex;
+            self._animIndex = (self._animIndex + 1) % self._preRenderedFrames.length;
+
+            // Just toggle opacity — instant, no canvas re-render
+            self._hideFrame(prevIndex);
+            self._showFrame(self._animIndex);
 
             try {
                 DotNet.invokeMethodAsync('JaxaRainmap', 'OnAnimFrameChangedCallback', self._animIndex);
             } catch (_) { }
         }, interval);
+    },
+
+    _showFrame: function (index) {
+        if (index < 0 || index >= this._preRenderedFrames.length) return;
+        for (const layer of this._preRenderedFrames[index]) {
+            layer.setOpacity(0.7);
+        }
+    },
+
+    _hideFrame: function (index) {
+        if (index < 0 || index >= this._preRenderedFrames.length) return;
+        for (const layer of this._preRenderedFrames[index]) {
+            layer.setOpacity(0);
+        }
     },
 
     stopAnimation: function () {
@@ -239,25 +301,42 @@ window.leafletInterop = {
             clearInterval(this._animTimerId);
             this._animTimerId = null;
         }
+        // Keep current frame visible, remove all others
+        if (this._preRenderedFrames.length > 0 && this._animIndex < this._preRenderedFrames.length) {
+            for (var i = 0; i < this._preRenderedFrames.length; i++) {
+                if (i !== this._animIndex) {
+                    for (const layer of this._preRenderedFrames[i]) {
+                        if (this.map) this.map.removeLayer(layer);
+                    }
+                } else {
+                    // Ensure current frame is visible
+                    for (const layer of this._preRenderedFrames[i]) {
+                        layer.setOpacity(0.7);
+                    }
+                }
+            }
+            this.currentLayers = this._preRenderedFrames[this._animIndex] || [];
+            this._preRenderedFrames = [];
+        }
     },
 
     setAnimationSpeed: function (speed) {
-        if (!this._animRunning) return;
-        var frames = this._animFrames;
-        var palette = this._animPalette;
-        var idx = this._animIndex;
-        this.stopAnimation();
-        this._animIndex = idx;
-        this._animRunning = true;
+        if (!this._animRunning || this._preRenderedFrames.length === 0) return;
+        // Clear old timer and start new one with updated interval
+        if (this._animTimerId !== null) {
+            clearInterval(this._animTimerId);
+        }
+        this._animSpeed = speed;
 
         var self = this;
         var interval = 1000.0 / speed;
-        this._animSpeed = speed;
 
         this._animTimerId = setInterval(function () {
-            if (!self._animRunning || self._animFrames.length === 0) return;
-            self._animIndex = (self._animIndex + 1) % self._animFrames.length;
-            self.renderCachedFrame(self._animFrames[self._animIndex], self._animPalette);
+            if (!self._animRunning || self._preRenderedFrames.length === 0) return;
+            var prevIndex = self._animIndex;
+            self._animIndex = (self._animIndex + 1) % self._preRenderedFrames.length;
+            self._hideFrame(prevIndex);
+            self._showFrame(self._animIndex);
             try {
                 DotNet.invokeMethodAsync('JaxaRainmap', 'OnAnimFrameChangedCallback', self._animIndex);
             } catch (_) { }
@@ -265,6 +344,7 @@ window.leafletInterop = {
     },
 
     clearGeoCache: function () {
+        this._cleanupPreRenderedFrames();
         this._geoCache.clear();
         this._log('debug', 'Animation', 'Georaster cache cleared');
     },
