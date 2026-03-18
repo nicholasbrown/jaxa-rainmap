@@ -7,7 +7,7 @@
 @inject IGsmapService GsmapService
 @inject ILogger<Home> Logger
 
-<PageTitle>JAXA Rain Radar — GSMaP</PageTitle>
+<PageTitle>JAXA Rain Radar \u2014 GSMaP</PageTitle>
 
 <div class="home-layout">
     <div class="controls-panel">
@@ -71,7 +71,6 @@
     {
         if (firstRender)
         {
-            // Subscribe to JS animation callbacks
             JaxaRainmap.Services.Logging.JsLogBridge.OnBufferProgress += OnBufferProgress;
             JaxaRainmap.Services.Logging.JsLogBridge.OnAnimFrameChanged += OnAnimFrameChanged;
             await LoadFramesForDateRange();
@@ -86,10 +85,10 @@
 
         try
         {
-            var startDate = _settings.SelectedDate.Date;
-            var endDate = _settings.CollectionType == "daily"
-                ? startDate.AddDays(_animationDays)
-                : startDate.AddMonths(6);
+            var endDate = _settings.SelectedDate.Date;
+            var startDate = _settings.CollectionType == "daily"
+                ? endDate.AddDays(-_animationDays)
+                : endDate.AddMonths(-6);
 
             Logger.LogDebug("Loading frames: {Type} from {Start:yyyy-MM-dd} to {End:yyyy-MM-dd}",
                 _settings.CollectionType, startDate, endDate);
@@ -208,10 +207,9 @@
         Logger.LogDebug("Starting buffered animation: {FrameCount} frames at {Speed}x",
             _frames.Count, _settings.PlaybackSpeed);
 
-        // Phase 1: Prebuffer all frames
         _isBuffering = true;
         _bufferLoaded = 0;
-        _bufferTotal = _frames.Count * 2; // 2 hemisphere tiles per frame
+        _bufferTotal = _frames.Count * 2;
         StateHasChanged();
 
         var frameUrlSets = _frames
@@ -225,7 +223,6 @@
 
         Logger.LogInformation("Prebuffer complete, starting JS-driven playback");
 
-        // Phase 2: Start JS-driven animation (all from cache, no network)
         await _mapRef.StartJsAnimationAsync(frameUrlSets, _settings.PlaybackSpeed, _settings.ColorPalette);
     }
 

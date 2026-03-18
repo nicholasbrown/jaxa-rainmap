@@ -88,12 +88,15 @@ window.leafletInterop = {
             }
 
             if (newLayers.length > 0) {
-                // Double-buffer: add new layers FIRST, then remove old ones
-                for (const layer of newLayers) {
-                    layer.addTo(this.map);
-                }
-                this._removeCurrentLayers();
-                this.currentLayers = newLayers;
+                // Atomic swap in single paint frame
+                var self = this;
+                requestAnimationFrame(function () {
+                    self._removeCurrentLayers();
+                    for (const layer of newLayers) {
+                        layer.addTo(self.map);
+                    }
+                    self.currentLayers = newLayers;
+                });
             }
 
             return newLayers.length > 0;
@@ -154,7 +157,6 @@ window.leafletInterop = {
             }
             loaded++;
 
-            // Report progress to C#
             try {
                 DotNet.invokeMethodAsync('JaxaRainmap', 'OnBufferProgressCallback', loaded, total);
             } catch (_) { }
@@ -185,11 +187,15 @@ window.leafletInterop = {
         }
 
         if (newLayers.length > 0) {
-            for (const layer of newLayers) {
-                layer.addTo(this.map);
-            }
-            this._removeCurrentLayers();
-            this.currentLayers = newLayers;
+            // Atomic swap: remove old + add new in a single requestAnimationFrame
+            var self = this;
+            requestAnimationFrame(function () {
+                self._removeCurrentLayers();
+                for (const layer of newLayers) {
+                    layer.addTo(self.map);
+                }
+                self.currentLayers = newLayers;
+            });
         }
 
         return newLayers.length > 0;
@@ -200,7 +206,7 @@ window.leafletInterop = {
     startAnimation: function (frames, speed, paletteType) {
         this.stopAnimation();
 
-        this._animFrames = frames; // array of arrays of URLs
+        this._animFrames = frames;
         this._animSpeed = speed;
         this._animPalette = paletteType;
         this._animIndex = 0;
@@ -211,7 +217,6 @@ window.leafletInterop = {
         var self = this;
         var interval = 1000.0 / speed;
 
-        // Render first frame immediately
         if (frames.length > 0) {
             this.renderCachedFrame(frames[0], paletteType);
         }
@@ -222,7 +227,6 @@ window.leafletInterop = {
             self._animIndex = (self._animIndex + 1) % self._animFrames.length;
             self.renderCachedFrame(self._animFrames[self._animIndex], self._animPalette);
 
-            // Notify C# of frame change
             try {
                 DotNet.invokeMethodAsync('JaxaRainmap', 'OnAnimFrameChangedCallback', self._animIndex);
             } catch (_) { }
@@ -239,7 +243,6 @@ window.leafletInterop = {
 
     setAnimationSpeed: function (speed) {
         if (!this._animRunning) return;
-        // Restart with new speed
         var frames = this._animFrames;
         var palette = this._animPalette;
         var idx = this._animIndex;
