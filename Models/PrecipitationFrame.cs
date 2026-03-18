@@ -8,6 +8,11 @@ public class PrecipitationFrame
     public string CollectionId { get; set; } = string.Empty;
     public double[]? Bbox { get; set; }
 
+    /// <summary>
+    /// Additional COG URLs for multi-tile frames (e.g. East + West hemisphere).
+    /// </summary>
+    public List<string> AdditionalCogUrls { get; set; } = new();
+
     public string DisplayLabel =>
         DateTime.ToString("yyyy-MM-dd HH:mm UTC");
 }

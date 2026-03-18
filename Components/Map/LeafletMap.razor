@@ -27,19 +27,26 @@
         _mapInitialized = true;
     }
 
-    public async Task<bool> LoadPrecipitationAsync(string cogUrl, string palette = "jma", double minVal = 0, double maxVal = 100)
+    public async Task<bool> LoadPrecipitationAsync(string cogUrl, string palette = "jma", double minVal = 0, double maxVal = 100, List<string>? additionalUrls = null)
     {
         if (!_mapInitialized) return false;
 
-        var result = await JS.InvokeAsync<bool>("leafletInterop.loadCogLayer", cogUrl, palette, minVal, maxVal);
+        var allUrls = new List<string> { cogUrl };
+        if (additionalUrls is not null) allUrls.AddRange(additionalUrls);
+
+        var result = await JS.InvokeAsync<bool>("leafletInterop.loadCogLayers", allUrls.ToArray(), palette, minVal, maxVal);
         await OnLayerLoaded.InvokeAsync(result);
         return result;
     }
 
-    public async Task<bool> SwapFrameAsync(string cogUrl, string palette = "jma", double minVal = 0, double maxVal = 100)
+    public async Task<bool> SwapFrameAsync(string cogUrl, string palette = "jma", double minVal = 0, double maxVal = 100, List<string>? additionalUrls = null)
     {
         if (!_mapInitialized) return false;
-        return await JS.InvokeAsync<bool>("leafletInterop.swapFrame", cogUrl, palette, minVal, maxVal);
+
+        var allUrls = new List<string> { cogUrl };
+        if (additionalUrls is not null) allUrls.AddRange(additionalUrls);
+
+        return await JS.InvokeAsync<bool>("leafletInterop.swapFrame", allUrls.ToArray(), palette, minVal, maxVal);
     }
 
     public async Task ClearOverlayAsync()

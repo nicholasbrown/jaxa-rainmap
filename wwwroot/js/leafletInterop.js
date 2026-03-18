@@ -1,7 +1,7 @@
 // Leaflet JS Interop for Blazor
 window.leafletInterop = {
     map: null,
-    currentLayer: null,
+    currentLayers: [],
     tileLayer: null,
 
     initMap: function (elementId, lat, lon, zoom) {
@@ -27,46 +27,65 @@ window.leafletInterop = {
     },
 
     loadCogLayer: async function (cogUrl, paletteType, minVal, maxVal) {
+        return await this.loadCogLayers([cogUrl], paletteType, minVal, maxVal);
+    },
+
+    loadCogLayers: async function (cogUrls, paletteType, minVal, maxVal) {
         if (!this.map) return false;
 
         try {
             this.removeCogLayer();
 
-            const response = await fetch(cogUrl);
-            if (!response.ok) {
-                console.error('Failed to fetch COG:', response.status, cogUrl);
-                return false;
+            const colorFn = this._getColorFunction(paletteType, minVal, maxVal);
+            let anyLoaded = false;
+
+            for (const cogUrl of cogUrls) {
+                try {
+                    const response = await fetch(cogUrl);
+                    if (!response.ok) {
+                        console.warn('Skipping COG (HTTP ' + response.status + '):', cogUrl);
+                        continue;
+                    }
+
+                    const arrayBuffer = await response.arrayBuffer();
+                    const georaster = await parseGeoraster(arrayBuffer);
+
+                    const layer = new GeoRasterLayer({
+                        georaster: georaster,
+                        opacity: 0.7,
+                        pixelValuesToColorFn: colorFn,
+                        resolution: 256
+                    });
+
+                    layer.addTo(this.map);
+                    this.currentLayers.push(layer);
+                    anyLoaded = true;
+                } catch (tileErr) {
+                    console.warn('Error loading COG tile:', cogUrl, tileErr);
+                }
             }
 
-            const arrayBuffer = await response.arrayBuffer();
-            const georaster = await parseGeoraster(arrayBuffer);
-
-            const colorFn = this._getColorFunction(paletteType, minVal, maxVal);
-
-            this.currentLayer = new GeoRasterLayer({
-                georaster: georaster,
-                opacity: 0.7,
-                pixelValuesToColorFn: colorFn,
-                resolution: 256
-            });
-
-            this.currentLayer.addTo(this.map);
-            return true;
+            return anyLoaded;
         } catch (err) {
-            console.error('Error loading COG layer:', err);
+            console.error('Error loading COG layers:', err);
             return false;
         }
     },
 
     removeCogLayer: function () {
-        if (this.currentLayer && this.map) {
-            this.map.removeLayer(this.currentLayer);
-            this.currentLayer = null;
+        if (this.map) {
+            for (const layer of this.currentLayers) {
+                this.map.removeLayer(layer);
+            }
         }
+        this.currentLayers = [];
     },
 
-    swapFrame: async function (cogUrl, paletteType, minVal, maxVal) {
-        return await this.loadCogLayer(cogUrl, paletteType, minVal, maxVal);
+    swapFrame: async function (cogUrls, paletteType, minVal, maxVal) {
+        return await this.loadCogLayers(
+            Array.isArray(cogUrls) ? cogUrls : [cogUrls],
+            paletteType, minVal, maxVal
+        );
     },
 
     fitBounds: function (south, west, north, east) {

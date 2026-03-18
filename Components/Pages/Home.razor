@@ -106,7 +106,7 @@
         _loadingMessage = $"Loading {frame.DisplayLabel}...";
         StateHasChanged();
 
-        await _mapRef.LoadPrecipitationAsync(frame.CogUrl, _settings.ColorPalette);
+        await _mapRef.LoadPrecipitationAsync(frame.CogUrl, _settings.ColorPalette, additionalUrls: frame.AdditionalCogUrls);
 
         _isLoading = false;
         StateHasChanged();
@@ -203,7 +203,8 @@
                 {
                     await _mapRef.SwapFrameAsync(
                         _frames[_currentFrameIndex].CogUrl,
-                        _settings.ColorPalette);
+                        _settings.ColorPalette,
+                        additionalUrls: _frames[_currentFrameIndex].AdditionalCogUrls);
                 }
                 StateHasChanged();
             });

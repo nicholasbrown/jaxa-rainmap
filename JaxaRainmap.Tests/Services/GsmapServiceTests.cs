@@ -61,7 +61,8 @@ public class GsmapServiceTests
 
         Assert.Equal(3, frames.Count);
         Assert.Equal(start, frames[0].DateTime);
-        Assert.All(frames, f => Assert.EndsWith(".tif", f.CogUrl));
+        Assert.All(frames, f => Assert.EndsWith("-PRECIP.tiff", f.CogUrl));
+        Assert.All(frames, f => Assert.NotEmpty(f.AdditionalCogUrls));
     }
 
     [Fact]

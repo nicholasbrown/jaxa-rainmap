@@ -127,18 +127,27 @@ public class GsmapService : IGsmapService
         var frames = new List<PrecipitationFrame>();
         var baseUrl = GsmapCollections.BaseUrl;
 
+        // STAC structure: {base}/{collection}/{YYYY-MM}/{DD}/0/{lon-range}/{filename}-PRECIP.tiff
+        // Level 0 has 2 tiles: East (E000-E180) and West (W180-E000) hemispheres
+        const string eastHemi = "E000.00-E180.00/E000.00-S90.00-E180.00-N90.00";
+        const string westHemi = "W180.00-E000.00/W180.00-S90.00-E000.00-N90.00";
+
         if (collectionType == "daily")
         {
             for (var date = startDate.Date; date <= endDate.Date; date = date.AddDays(1))
             {
-                var dateStr = date.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+                var monthStr = date.ToString("yyyy-MM", CultureInfo.InvariantCulture);
+                var dayStr = date.Day.ToString(CultureInfo.InvariantCulture);
+                var pathBase = $"{baseUrl}/{collectionId}/{monthStr}/{dayStr}/0";
+
                 frames.Add(new PrecipitationFrame
                 {
-                    Id = $"{collectionId}_{dateStr}",
+                    Id = $"{collectionId}_{date:yyyyMMdd}",
                     DateTime = date,
-                    CogUrl = $"{baseUrl}/{collectionId}/{dateStr}.tif",
+                    CogUrl = $"{pathBase}/{eastHemi}-PRECIP.tiff",
+                    AdditionalCogUrls = new List<string> { $"{pathBase}/{westHemi}-PRECIP.tiff" },
                     CollectionId = collectionId,
-                    Bbox = new double[] { -180, -60, 180, 60 }
+                    Bbox = new double[] { -180, -90, 180, 90 }
                 });
             }
         }
@@ -148,14 +157,17 @@ public class GsmapService : IGsmapService
                  date <= endDate;
                  date = date.AddMonths(1))
             {
-                var dateStr = date.ToString("yyyyMM", CultureInfo.InvariantCulture);
+                var monthStr = date.ToString("yyyy-MM", CultureInfo.InvariantCulture);
+                var pathBase = $"{baseUrl}/{collectionId}/{monthStr}/0";
+
                 frames.Add(new PrecipitationFrame
                 {
-                    Id = $"{collectionId}_{dateStr}",
+                    Id = $"{collectionId}_{date:yyyyMM}",
                     DateTime = date,
-                    CogUrl = $"{baseUrl}/{collectionId}/{dateStr}.tif",
+                    CogUrl = $"{pathBase}/{eastHemi}-PRECIP.tiff",
+                    AdditionalCogUrls = new List<string> { $"{pathBase}/{westHemi}-PRECIP.tiff" },
                     CollectionId = collectionId,
-                    Bbox = new double[] { -180, -60, 180, 60 }
+                    Bbox = new double[] { -180, -90, 180, 90 }
                 });
             }
         }
