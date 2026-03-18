@@ -5,8 +5,9 @@
 @using JaxaRainmap.Components.Controls
 @using JaxaRainmap.Components.Shared
 @inject IGsmapService GsmapService
+@inject ILogger<Home> Logger
 
-<PageTitle>JAXA Rain Radar \u2014 GSMaP</PageTitle>
+<PageTitle>JAXA Rain Radar — GSMaP</PageTitle>
 
 <div class="home-layout">
     <div class="controls-panel">
@@ -79,17 +80,27 @@
                 ? startDate.AddDays(7)
                 : startDate.AddMonths(6);
 
+            Logger.LogDebug("Loading frames: {Type} from {Start:yyyy-MM-dd} to {End:yyyy-MM-dd}",
+                _settings.CollectionType, startDate, endDate);
+
             _frames = await GsmapService.GetFramesAsync(_settings.CollectionType, startDate, endDate);
+
+            Logger.LogInformation("Loaded {FrameCount} frames for {Type}", _frames.Count, _settings.CollectionType);
 
             if (_frames.Count > 0)
             {
                 _currentFrameIndex = 0;
                 await LoadFrameOnMap(_frames[0]);
             }
+            else
+            {
+                Logger.LogWarning("No frames available for date range {Start:yyyy-MM-dd} to {End:yyyy-MM-dd}",
+                    startDate, endDate);
+            }
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error loading frames: {ex.Message}");
+            Logger.LogError(ex, "Error loading frames");
         }
         finally
         {
@@ -106,8 +117,12 @@
         _loadingMessage = $"Loading {frame.DisplayLabel}...";
         StateHasChanged();
 
+        Logger.LogDebug("Loading COG frame {FrameId}: {CogUrl} (+{AdditionalCount} tiles)",
+            frame.Id, frame.CogUrl, frame.AdditionalCogUrls.Count);
+
         await _mapRef.LoadPrecipitationAsync(frame.CogUrl, _settings.ColorPalette, additionalUrls: frame.AdditionalCogUrls);
 
+        Logger.LogDebug("Frame {FrameId} loaded on map", frame.Id);
         _isLoading = false;
         StateHasChanged();
     }
@@ -164,6 +179,8 @@
     private void OnPlayingChanged(bool isPlaying)
     {
         _settings.IsPlaying = isPlaying;
+        Logger.LogDebug("Animation {State} (speed={Speed}x, frames={Count})",
+            isPlaying ? "STARTED" : "PAUSED", _settings.PlaybackSpeed, _frames.Count);
 
         if (isPlaying)
         {
@@ -223,7 +240,7 @@
     {
         if (!success)
         {
-            Console.Error.WriteLine("Failed to load precipitation layer");
+            Logger.LogError("Failed to load precipitation layer on map");
         }
     }
 

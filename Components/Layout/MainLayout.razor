@@ -3,10 +3,10 @@
 <div class="app-container @(_darkMode ? "dark" : "light")">
     <aside class="sidebar">
         <div class="sidebar-header">
-            <h1 class="app-title">\uD83C\uDF27\uFE0F JAXA Rain Radar</h1>
+            <h1 class="app-title">🌧️ JAXA Rain Radar</h1>
             <p class="app-subtitle">GSMaP Precipitation Visualiser</p>
             <button class="theme-toggle" @onclick="ToggleTheme" title="Toggle theme">
-                @(_darkMode ? "\u2600\uFE0F" : "\uD83C\uDF19")
+                @(_darkMode ? "☀️" : "🌙")
             </button>
         </div>
 
@@ -18,6 +18,7 @@
             <p class="attribution">
                 Data: <a href="https://sharaku.eorc.jaxa.jp/GSMaP/" target="_blank">GSMaP</a>
                 by <a href="https://www.eorc.jaxa.jp/" target="_blank">JAXA/EORC</a>
+                · <a href="/logs">Debug Logs</a>
             </p>
         </footer>
     </aside>

@@ -70,7 +70,7 @@ public class GsmapServiceTests
         var handler = new SmartTestHandler(collection, catalog);
         var http = new HttpClient(handler);
         var cache = new CacheService();
-        var service = new GsmapService(http, cache);
+        var service = new GsmapService(http, cache, Microsoft.Extensions.Logging.Abstractions.NullLogger<GsmapService>.Instance);
 
         var start = new DateTime(2024, 1, 1);
         var end = new DateTime(2024, 1, 3);
@@ -91,7 +91,7 @@ public class GsmapServiceTests
         var handler = new SmartTestHandler(collection, catalog);
         var http = new HttpClient(handler);
         var cache = new CacheService();
-        var service = new GsmapService(http, cache);
+        var service = new GsmapService(http, cache, Microsoft.Extensions.Logging.Abstractions.NullLogger<GsmapService>.Instance);
 
         var frames = await service.GetFramesAsync("daily",
             new DateTime(2024, 3, 1), new DateTime(2024, 3, 5));
@@ -109,7 +109,7 @@ public class GsmapServiceTests
         var handler = new TestHttpMessageHandler(JsonSerializer.Serialize(collection));
         var http = new HttpClient(handler);
         var cache = new CacheService();
-        var service = new GsmapService(http, cache);
+        var service = new GsmapService(http, cache, Microsoft.Extensions.Logging.Abstractions.NullLogger<GsmapService>.Instance);
 
         var frames = await service.GetFramesAsync("monthly",
             new DateTime(2024, 1, 1), new DateTime(2024, 3, 1));
@@ -122,13 +122,14 @@ public class GsmapServiceTests
     public async Task GetLatestFrameAsync_ReturnsSingleFrame()
     {
         var collection = CreateTestCollection();
+        // Create a catalog with recent days
         var recentDays = Enumerable.Range(1, 28).ToArray();
         var catalog = CreateMonthlyCatalog(recentDays);
 
         var handler = new SmartTestHandler(collection, catalog);
         var http = new HttpClient(handler);
         var cache = new CacheService();
-        var service = new GsmapService(http, cache);
+        var service = new GsmapService(http, cache, Microsoft.Extensions.Logging.Abstractions.NullLogger<GsmapService>.Instance);
 
         var frame = await service.GetLatestFrameAsync("daily");
         Assert.NotNull(frame);

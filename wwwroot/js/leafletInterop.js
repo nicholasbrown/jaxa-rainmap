@@ -4,6 +4,18 @@ window.leafletInterop = {
     currentLayers: [],
     tileLayer: null,
 
+    // Bridge JS logs to C# ILogger
+    _log: function (level, category, message) {
+        try {
+            DotNet.invokeMethodAsync('JaxaRainmap', 'OnJsLog', level, category, message);
+        } catch (_) {
+            // Fallback if .NET bridge not ready
+        }
+        // Always also log to browser console for terminal visibility
+        var consoleFn = level === 'error' ? console.error : level === 'warn' ? console.warn : console.debug;
+        consoleFn('[' + category + ']', message);
+    },
+
     initMap: function (elementId, lat, lon, zoom) {
         if (this.map) {
             this.map.remove();
@@ -23,7 +35,10 @@ window.leafletInterop = {
             noWrap: true
         }).addTo(this.map);
 
+        // Force a resize after init
+        // Force a resize after init
         setTimeout(() => this.map.invalidateSize(), 100);
+        this._log('info', 'LeafletMap', 'Map initialized at [' + lat + ',' + lon + '] zoom=' + zoom);
     },
 
     loadCogLayer: async function (cogUrl, paletteType, minVal, maxVal) {
@@ -43,7 +58,7 @@ window.leafletInterop = {
                 try {
                     const response = await fetch(cogUrl);
                     if (!response.ok) {
-                        console.warn('Skipping COG (HTTP ' + response.status + '):', cogUrl);
+                        this._log('warn', 'LeafletMap', 'Skipping COG (HTTP ' + response.status + '): ' + cogUrl);
                         continue;
                     }
 
@@ -61,13 +76,13 @@ window.leafletInterop = {
                     this.currentLayers.push(layer);
                     anyLoaded = true;
                 } catch (tileErr) {
-                    console.warn('Error loading COG tile:', cogUrl, tileErr);
+                    this._log('error', 'LeafletMap', 'Error loading COG tile ' + cogUrl + ': ' + tileErr.message);
                 }
             }
 
             return anyLoaded;
         } catch (err) {
-            console.error('Error loading COG layers:', err);
+            this._log('error', 'LeafletMap', 'Error loading COG layers: ' + err.message);
             return false;
         }
     },
@@ -86,6 +101,18 @@ window.leafletInterop = {
             Array.isArray(cogUrls) ? cogUrls : [cogUrls],
             paletteType, minVal, maxVal
         );
+    },
+
+    downloadTextFile: function (filename, text) {
+        var blob = new Blob([text], { type: 'text/plain' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     },
 
     fitBounds: function (south, west, north, east) {
@@ -138,7 +165,7 @@ window.leafletInterop = {
             const val = values[0];
 
             if (val === null || val === undefined || isNaN(val) || val <= 0) {
-                return null;
+                return null; // transparent
             }
 
             for (let i = palette.length - 1; i >= 0; i--) {

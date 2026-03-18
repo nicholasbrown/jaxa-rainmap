@@ -1,0 +1,128 @@
+@page "/logs"
+@using JaxaRainmap.Models
+@using JaxaRainmap.Services.Logging
+@inject LogBuffer LogBuffer
+@inject IJSRuntime JS
+@implements IDisposable
+
+<PageTitle>Debug Logs — JAXA Rain Radar</PageTitle>
+
+<div class="log-viewer">
+    <div class="log-header">
+        <h2>🔍 Debug Logs</h2>
+        <div class="log-actions">
+            <select class="control-select log-filter" @onchange="OnFilterChanged">
+                <option value="all">All Levels</option>
+                <option value="debug">Debug+</option>
+                <option value="info">Info+</option>
+                <option value="warning">Warning+</option>
+                <option value="error">Error+</option>
+            </select>
+            <button class="log-btn" @onclick="CopyAll" title="Copy all to clipboard">📋 Copy</button>
+            <button class="log-btn" @onclick="ExportLogs" title="Download as .log file">💾 Export</button>
+            <button class="log-btn" @onclick="Refresh" title="Refresh">🔄</button>
+            <span class="log-count">@_filteredEntries.Count entries</span>
+        </div>
+    </div>
+
+    <div class="log-table-container" @ref="_scrollContainer">
+        <table class="log-table">
+            <thead>
+                <tr>
+                    <th class="col-time">Time</th>
+                    <th class="col-level">Level</th>
+                    <th class="col-category">Category</th>
+                    <th class="col-message">Message</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var entry in _filteredEntries)
+                {
+                    <tr class="@entry.LevelCss">
+                        <td class="col-time">@entry.Timestamp.ToString("HH:mm:ss.fff")</td>
+                        <td class="col-level">@entry.LevelShort</td>
+                        <td class="col-category">@entry.Category</td>
+                        <td class="col-message">
+                            @entry.Message
+                            @if (!string.IsNullOrEmpty(entry.Exception))
+                            {
+                                <pre class="log-exception">@entry.Exception</pre>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <div class="log-footer">
+        <a href="/" class="back-link">← Back to map</a>
+    </div>
+</div>
+
+@code {
+    private List<LogEntry> _allEntries = new();
+    private List<LogEntry> _filteredEntries = new();
+    private LogLevel _minLevel = LogLevel.Debug;
+    private ElementReference _scrollContainer;
+
+    protected override void OnInitialized()
+    {
+        Refresh();
+        LogBuffer.OnNewEntry += OnNewLogEntry;
+    }
+
+    private void OnNewLogEntry()
+    {
+        InvokeAsync(() =>
+        {
+            Refresh();
+            StateHasChanged();
+        });
+    }
+
+    private void Refresh()
+    {
+        _allEntries = LogBuffer.GetAll();
+        ApplyFilter();
+    }
+
+    private void ApplyFilter()
+    {
+        _filteredEntries = _allEntries
+            .Where(e => e.Level >= _minLevel)
+            .ToList();
+    }
+
+    private void OnFilterChanged(ChangeEventArgs e)
+    {
+        _minLevel = e.Value?.ToString() switch
+        {
+            "debug" => LogLevel.Debug,
+            "info" => LogLevel.Information,
+            "warning" => LogLevel.Warning,
+            "error" => LogLevel.Error,
+            _ => LogLevel.Trace
+        };
+        ApplyFilter();
+    }
+
+    private async Task CopyAll()
+    {
+        var text = string.Join("\n", _filteredEntries.Select(e => e.ToString()));
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", text);
+    }
+
+    private async Task ExportLogs()
+    {
+        var text = LogBuffer.ExportAll();
+        var timestamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss");
+        await JS.InvokeVoidAsync("leafletInterop.downloadTextFile",
+            $"jaxa-rainmap-{timestamp}.log", text);
+    }
+
+    public void Dispose()
+    {
+        LogBuffer.OnNewEntry -= OnNewLogEntry;
+    }
+}

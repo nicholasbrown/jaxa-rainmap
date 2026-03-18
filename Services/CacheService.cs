@@ -1,11 +1,20 @@
 using System.Collections.Concurrent;
+using Microsoft.Extensions.Logging;
 
 namespace JaxaRainmap.Services;
 
 public class CacheService : ICacheService
 {
     private readonly ConcurrentDictionary<string, CacheEntry> _cache = new();
+    private readonly ILogger<CacheService>? _logger;
     private const int MaxEntries = 500;
+
+    public CacheService() { }
+
+    public CacheService(ILogger<CacheService> logger)
+    {
+        _logger = logger;
+    }
 
     public T? Get<T>(string key) where T : class
     {
@@ -51,6 +60,7 @@ public class CacheService : ICacheService
     {
         if (_cache.Count < MaxEntries) return;
 
+        // Evict expired entries first
         var expired = _cache
             .Where(kv => kv.Value.ExpiresAt <= DateTime.UtcNow)
             .Select(kv => kv.Key)
@@ -61,6 +71,7 @@ public class CacheService : ICacheService
             _cache.TryRemove(key, out _);
         }
 
+        // If still over limit, evict least recently accessed
         if (_cache.Count >= MaxEntries)
         {
             var lru = _cache
