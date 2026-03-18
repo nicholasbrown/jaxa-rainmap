@@ -5,7 +5,7 @@ public class MapSettings
     public double CenterLat { get; set; } = 20.0;
     public double CenterLon { get; set; } = 136.0;
     public int Zoom { get; set; } = 3;
-    public DateTime SelectedDate { get; set; } = DateTime.UtcNow.AddDays(-3);
+    public DateTime SelectedDate { get; set; } = DateTime.UtcNow.AddDays(-7);
     public int SelectedHour { get; set; } = 0;
     public string CollectionType { get; set; } = "daily";
     public string ColorPalette { get; set; } = "jma";

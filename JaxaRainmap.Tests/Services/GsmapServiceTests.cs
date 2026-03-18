@@ -7,13 +7,13 @@ namespace JaxaRainmap.Tests.Services;
 
 public class GsmapServiceTests
 {
-    private static StacCollection CreateTestCollection(List<StacLink>? itemLinks = null)
+    private static StacCollection CreateTestCollection()
     {
         return new StacCollection
         {
             Id = "JAXA.EORC_GSMaP_standard.Gauge.00Z-23Z.v6_daily",
             Title = "GSMaP Daily",
-            Links = itemLinks ?? new List<StacLink>(),
+            Links = new List<StacLink>(),
             Extent = new StacExtent
             {
                 Spatial = new StacSpatialExtent
@@ -21,6 +21,23 @@ public class GsmapServiceTests
                     Bbox = new List<List<double>> { new() { -180, -60, 180, 60 } }
                 }
             }
+        };
+    }
+
+    private static StacCollection CreateMonthlyCatalog(int[] days)
+    {
+        var links = days.Select(d => new StacLink
+        {
+            Rel = "child",
+            Href = $"./{d}/catalog.json",
+            Type = "application/json"
+        }).ToList();
+
+        return new StacCollection
+        {
+            Id = "catalog",
+            Title = "Monthly catalog",
+            Links = links
         };
     }
 
@@ -48,9 +65,9 @@ public class GsmapServiceTests
     public async Task GetFramesAsync_WithNoItems_ReturnsDatePatternFrames()
     {
         var collection = CreateTestCollection();
-        var json = JsonSerializer.Serialize(collection);
+        var catalog = CreateMonthlyCatalog(new[] { 1, 2, 3 });
 
-        var handler = new TestHttpMessageHandler(json);
+        var handler = new SmartTestHandler(collection, catalog);
         var http = new HttpClient(handler);
         var cache = new CacheService();
         var service = new GsmapService(http, cache);
@@ -69,9 +86,9 @@ public class GsmapServiceTests
     public async Task GetFramesAsync_ReturnsSortedByDate()
     {
         var collection = CreateTestCollection();
-        var json = JsonSerializer.Serialize(collection);
+        var catalog = CreateMonthlyCatalog(new[] { 1, 2, 3, 4, 5 });
 
-        var handler = new TestHttpMessageHandler(json);
+        var handler = new SmartTestHandler(collection, catalog);
         var http = new HttpClient(handler);
         var cache = new CacheService();
         var service = new GsmapService(http, cache);
@@ -86,18 +103,59 @@ public class GsmapServiceTests
     }
 
     [Fact]
+    public async Task GetFramesAsync_Monthly_BuildsFromDatePattern()
+    {
+        var collection = CreateTestCollection();
+        var handler = new TestHttpMessageHandler(JsonSerializer.Serialize(collection));
+        var http = new HttpClient(handler);
+        var cache = new CacheService();
+        var service = new GsmapService(http, cache);
+
+        var frames = await service.GetFramesAsync("monthly",
+            new DateTime(2024, 1, 1), new DateTime(2024, 3, 1));
+
+        Assert.Equal(3, frames.Count);
+        Assert.All(frames, f => Assert.EndsWith("-PRECIP.tiff", f.CogUrl));
+    }
+
+    [Fact]
     public async Task GetLatestFrameAsync_ReturnsSingleFrame()
     {
         var collection = CreateTestCollection();
-        var json = JsonSerializer.Serialize(collection);
+        var recentDays = Enumerable.Range(1, 28).ToArray();
+        var catalog = CreateMonthlyCatalog(recentDays);
 
-        var handler = new TestHttpMessageHandler(json);
+        var handler = new SmartTestHandler(collection, catalog);
         var http = new HttpClient(handler);
         var cache = new CacheService();
         var service = new GsmapService(http, cache);
 
         var frame = await service.GetLatestFrameAsync("daily");
         Assert.NotNull(frame);
+    }
+
+    private class SmartTestHandler : HttpMessageHandler
+    {
+        private readonly string _collectionJson;
+        private readonly string _catalogJson;
+
+        public SmartTestHandler(StacCollection collection, StacCollection catalog)
+        {
+            _collectionJson = JsonSerializer.Serialize(collection);
+            _catalogJson = JsonSerializer.Serialize(catalog);
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var url = request.RequestUri?.ToString() ?? "";
+            var content = url.Contains("collection.json") ? _collectionJson : _catalogJson;
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(content, System.Text.Encoding.UTF8, "application/json")
+            });
+        }
     }
 
     private class TestHttpMessageHandler : HttpMessageHandler

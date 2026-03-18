@@ -47,13 +47,13 @@ public class GsmapService : IGsmapService
         var collection = await GetCollectionMetadataAsync(collectionId);
         if (collection is null) return frames;
 
-        var itemLinks = collection.Links
-            .Where(l => l.Rel == "item")
-            .ToList();
-
-        if (itemLinks.Any())
+        if (collectionType == "daily")
         {
-            frames = await BuildFramesFromItemLinksAsync(itemLinks, collectionId, startDate, endDate);
+            frames = await BuildDailyFramesFromCatalogAsync(collectionId, startDate, endDate);
+        }
+        else if (collectionType == "monthly")
+        {
+            frames = BuildFramesFromDatePattern(collectionId, collectionType, startDate, endDate);
         }
         else
         {
@@ -65,9 +65,99 @@ public class GsmapService : IGsmapService
 
     public async Task<PrecipitationFrame?> GetLatestFrameAsync(string collectionType)
     {
-        var yesterday = DateTime.UtcNow.AddDays(-1);
-        var frames = await GetFramesAsync(collectionType, yesterday, yesterday);
-        return frames.LastOrDefault();
+        var collectionId = ResolveCollectionId(collectionType);
+        for (int daysBack = 3; daysBack <= 14; daysBack++)
+        {
+            var date = DateTime.UtcNow.AddDays(-daysBack);
+            var frames = await BuildDailyFramesFromCatalogAsync(collectionId, date, date);
+            if (frames.Count > 0) return frames.Last();
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Fetches the STAC monthly catalog to discover which days actually have data,
+    /// then builds COG URLs only for days that exist.
+    /// </summary>
+    private async Task<List<PrecipitationFrame>> BuildDailyFramesFromCatalogAsync(
+        string collectionId, DateTime startDate, DateTime endDate)
+    {
+        var frames = new List<PrecipitationFrame>();
+        var baseUrl = GsmapCollections.BaseUrl;
+
+        const string eastHemi = "E000.00-E180.00/E000.00-S90.00-E180.00-N90.00";
+        const string westHemi = "W180.00-E000.00/W180.00-S90.00-E000.00-N90.00";
+
+        var currentMonth = new DateTime(startDate.Year, startDate.Month, 1);
+        var lastMonth = new DateTime(endDate.Year, endDate.Month, 1);
+
+        while (currentMonth <= lastMonth)
+        {
+            var monthStr = currentMonth.ToString("yyyy-MM", CultureInfo.InvariantCulture);
+            var catalogUrl = $"{baseUrl}/{collectionId}/{monthStr}/catalog.json";
+
+            try
+            {
+                var cacheKey = $"catalog:{catalogUrl}";
+                var catalog = _cache.Get<StacCollection>(cacheKey);
+
+                if (catalog is null)
+                {
+                    catalog = await _http.GetFromJsonAsync<StacCollection>(catalogUrl);
+                    if (catalog is not null)
+                    {
+                        _cache.Set(cacheKey, catalog, TimeSpan.FromHours(1));
+                    }
+                }
+
+                if (catalog is null)
+                {
+                    currentMonth = currentMonth.AddMonths(1);
+                    continue;
+                }
+
+                // Extract available days from child links (e.g. "./15/catalog.json")
+                var dayLinks = catalog.Links
+                    .Where(l => l.Rel == "child")
+                    .Select(l => l.Href.TrimStart('.', '/').TrimEnd('/'))
+                    .Where(h => h.EndsWith("/catalog.json"))
+                    .Select(h => h.Split('/')[0])
+                    .Where(d => int.TryParse(d, out _))
+                    .Select(d => int.Parse(d))
+                    .OrderBy(d => d)
+                    .ToList();
+
+                foreach (var day in dayLinks)
+                {
+                    try
+                    {
+                        var date = new DateTime(currentMonth.Year, currentMonth.Month, day);
+                        if (date < startDate.Date || date > endDate.Date) continue;
+
+                        var pathBase = $"{baseUrl}/{collectionId}/{monthStr}/{day}/0";
+
+                        frames.Add(new PrecipitationFrame
+                        {
+                            Id = $"{collectionId}_{date:yyyyMMdd}",
+                            DateTime = date,
+                            CogUrl = $"{pathBase}/{eastHemi}-PRECIP.tiff",
+                            AdditionalCogUrls = new List<string> { $"{pathBase}/{westHemi}-PRECIP.tiff" },
+                            CollectionId = collectionId,
+                            Bbox = new double[] { -180, -90, 180, 90 }
+                        });
+                    }
+                    catch { /* skip invalid day numbers */ }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Failed to fetch catalog for {monthStr}: {ex.Message}");
+            }
+
+            currentMonth = currentMonth.AddMonths(1);
+        }
+
+        return frames;
     }
 
     private async Task<List<PrecipitationFrame>> BuildFramesFromItemLinksAsync(
@@ -127,8 +217,6 @@ public class GsmapService : IGsmapService
         var frames = new List<PrecipitationFrame>();
         var baseUrl = GsmapCollections.BaseUrl;
 
-        // STAC structure: {base}/{collection}/{YYYY-MM}/{DD}/0/{lon-range}/{filename}-PRECIP.tiff
-        // Level 0 has 2 tiles: East (E000-E180) and West (W180-E000) hemispheres
         const string eastHemi = "E000.00-E180.00/E000.00-S90.00-E180.00-N90.00";
         const string westHemi = "W180.00-E000.00/W180.00-S90.00-E000.00-N90.00";
 
