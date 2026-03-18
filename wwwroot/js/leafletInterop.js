@@ -166,6 +166,7 @@ window.leafletInterop = {
 
         // Phase 2: Pre-create all Leaflet layers and add them hidden to the map
         this._cleanupPreRenderedFrames();
+        this._removeCurrentLayers(); // Remove static frame so it doesn't overlap
         var colorFn = this._getColorFunction(paletteType, 0, 100);
 
         for (var i = 0; i < frameUrlSets.length; i++) {
@@ -227,7 +228,6 @@ window.leafletInterop = {
         }
 
         if (newLayers.length > 0) {
-            // Atomic swap: remove old + add new in a single requestAnimationFrame
             var self = this;
             requestAnimationFrame(function () {
                 self._removeCurrentLayers();
@@ -244,7 +244,8 @@ window.leafletInterop = {
     // --- JS-driven animation loop (opacity toggling, no layer creation during playback) ---
 
     startAnimation: function (frames, speed, paletteType) {
-        this.stopAnimation();
+        // Only stop timer, don't cleanup layers (prebufferFrames already set them up)
+        this._stopTimer();
 
         this._animFrames = frames;
         this._animSpeed = speed;
@@ -254,12 +255,15 @@ window.leafletInterop = {
 
         this._log('info', 'Animation', 'Starting playback: ' + this._preRenderedFrames.length + ' pre-rendered frames at ' + speed + 'x');
 
-        // Hide non-animation layers
+        // Hide the static (non-animation) layers so they don't overlap
         this._removeCurrentLayers();
 
         // Show first frame
         if (this._preRenderedFrames.length > 0) {
             this._showFrame(0);
+        } else {
+            this._log('error', 'Animation', 'No pre-rendered frames available!');
+            return;
         }
 
         var self = this;
@@ -271,7 +275,6 @@ window.leafletInterop = {
             var prevIndex = self._animIndex;
             self._animIndex = (self._animIndex + 1) % self._preRenderedFrames.length;
 
-            // Just toggle opacity — instant, no canvas re-render
             self._hideFrame(prevIndex);
             self._showFrame(self._animIndex);
 
@@ -295,23 +298,29 @@ window.leafletInterop = {
         }
     },
 
-    stopAnimation: function () {
+    _stopTimer: function () {
         this._animRunning = false;
         if (this._animTimerId !== null) {
             clearInterval(this._animTimerId);
             this._animTimerId = null;
         }
-        // Keep current frame visible, remove all others
-        if (this._preRenderedFrames.length > 0 && this._animIndex < this._preRenderedFrames.length) {
+    },
+
+    stopAnimation: function () {
+        this._stopTimer();
+
+        // Promote current frame to currentLayers, remove all other pre-rendered frames
+        if (this._preRenderedFrames.length > 0) {
             for (var i = 0; i < this._preRenderedFrames.length; i++) {
-                if (i !== this._animIndex) {
-                    for (const layer of this._preRenderedFrames[i]) {
-                        if (this.map) this.map.removeLayer(layer);
-                    }
-                } else {
-                    // Ensure current frame is visible
+                if (i === this._animIndex) {
+                    // Keep this frame visible
                     for (const layer of this._preRenderedFrames[i]) {
                         layer.setOpacity(0.7);
+                    }
+                } else {
+                    // Remove hidden frames from map
+                    for (const layer of this._preRenderedFrames[i]) {
+                        if (this.map) this.map.removeLayer(layer);
                     }
                 }
             }
@@ -322,7 +331,7 @@ window.leafletInterop = {
 
     setAnimationSpeed: function (speed) {
         if (!this._animRunning || this._preRenderedFrames.length === 0) return;
-        // Clear old timer and start new one with updated interval
+        // Just restart the timer with new interval (don't touch layers)
         if (this._animTimerId !== null) {
             clearInterval(this._animTimerId);
         }
