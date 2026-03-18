@@ -66,4 +66,28 @@
         if (!_mapInitialized) return;
         await JS.InvokeVoidAsync("leafletInterop.invalidateSize");
     }
+
+    public async Task<bool> PrebufferFramesAsync(string[][] frameUrlSets, string palette)
+    {
+        if (!_mapInitialized) return false;
+        return await JS.InvokeAsync<bool>("leafletInterop.prebufferFrames", (object)frameUrlSets, palette);
+    }
+
+    public async Task StartJsAnimationAsync(string[][] frameUrlSets, double speed, string palette)
+    {
+        if (!_mapInitialized) return;
+        await JS.InvokeVoidAsync("leafletInterop.startAnimation", (object)frameUrlSets, speed, palette);
+    }
+
+    public async Task StopJsAnimationAsync()
+    {
+        if (!_mapInitialized) return;
+        await JS.InvokeVoidAsync("leafletInterop.stopAnimation");
+    }
+
+    public async Task SetAnimationSpeedAsync(double speed)
+    {
+        if (!_mapInitialized) return;
+        await JS.InvokeVoidAsync("leafletInterop.setAnimationSpeed", speed);
+    }
 }

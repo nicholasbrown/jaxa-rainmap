@@ -285,6 +285,36 @@ h1:focus { outline: none; }
     color: var(--accent);
 }
 
+/* === Buffer Progress === */
+.buffer-progress {
+    margin-top: 4px;
+}
+.buffer-bar-bg {
+    height: 6px;
+    background: var(--input-bg, #1a2540);
+    border-radius: 3px;
+    overflow: hidden;
+}
+.buffer-bar-fill {
+    height: 100%;
+    background: var(--accent, #4fc3f7);
+    border-radius: 3px;
+    transition: width 0.2s ease;
+}
+.buffer-text {
+    font-size: 0.7rem;
+    color: var(--accent, #4fc3f7);
+    margin-top: 2px;
+    display: block;
+}
+.range-control {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8rem;
+    margin-bottom: 0.4rem;
+}
+
 /* === Color Legend === */
 .color-legend {
     background: var(--bg-card);
